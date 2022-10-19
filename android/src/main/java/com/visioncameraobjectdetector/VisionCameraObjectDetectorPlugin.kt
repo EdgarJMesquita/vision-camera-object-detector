@@ -16,6 +16,7 @@ import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.ObjectDetector
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import com.mrousavy.camera.frameprocessor.FrameProcessorPlugin
+import kotlin.math.ceil
 import kotlin.Any as Any
 
 
@@ -27,26 +28,49 @@ class VisionCameraObjectDetectorPlugin internal constructor() :
 
   var objectDetector: ObjectDetector = ObjectDetection.getClient(options)
 
-  private fun processBoundingBox(boundingBox: Rect): WritableMap {
+  private fun processBoundingBox(boundingBox: Rect, width: Int, height: Int): WritableMap {
     val bounds: WritableMap = Arguments.createMap()
-    val offsetX: Double = (boundingBox.exactCenterX() - Math.ceil(boundingBox.width().toDouble())) / 2.0f
-    val offsetY: Double = (boundingBox.exactCenterY() - Math.ceil(boundingBox.height().toDouble())) / 2.0f
+
+    val origin = WritableNativeMap()
+    val offsetX: Double = (boundingBox.exactCenterX() - ceil(boundingBox.width().toDouble())) / 2.0f
+    val offsetY: Double = (boundingBox.exactCenterY() - ceil(boundingBox.height().toDouble())) / 2.0f
     val x: Double = boundingBox.right + offsetX
     val y: Double = boundingBox.top + offsetY
-    bounds.putDouble("x", boundingBox.centerX() + (boundingBox.centerX() - x))
-    bounds.putDouble("y", boundingBox.centerY() + (y - boundingBox.centerY()))
-    bounds.putDouble("width", boundingBox.width().toDouble())
-    bounds.putDouble("height", boundingBox.height().toDouble())
-    bounds.putDouble("left", boundingBox.left.toDouble())
-    bounds.putDouble("top", boundingBox.top.toDouble())
-    bounds.putDouble("right", boundingBox.right.toDouble())
-    bounds.putDouble("bottom", boundingBox.bottom.toDouble())
+
+    origin.putDouble("x", boundingBox.centerX() + (boundingBox.centerX() - x))
+    origin.putDouble("y", boundingBox.centerY() + (y - boundingBox.centerY()))
+    bounds.putMap("origin",origin)
+
+    val size = WritableNativeMap()
+    size.putDouble("width", boundingBox.width().toDouble())
+    size.putDouble("height", boundingBox.height().toDouble())
+    bounds.putMap("size",size)
+
+    val relativeOrigin = WritableNativeMap()
+    relativeOrigin.putInt("top",percentage(boundingBox.top,width))
+    relativeOrigin.putInt("left",percentage(boundingBox.left,height))
+    bounds.putMap("relativeOrigin",relativeOrigin)
+
+    val relativeSize = WritableNativeMap()
+    relativeSize.putInt("width",percentage(boundingBox.width(),height))
+    relativeSize.putInt("height",percentage(boundingBox.height(),width))
+    bounds.putMap("relativeSize",relativeSize)
+
     return bounds
   }
 
+  private fun percentage(x:Int, y:Int): Int {
+    return (x * 100)/y
+  }
+
+  private fun processClassification(){
+    // TODO: process classification
+  }
+
+
   override fun callback(imageProxy: ImageProxy, params: Array<Any>): Any? {
     @SuppressLint("UnsafeOptInUsageError")
-    val mediaImage: Image? = imageProxy.getImage()
+    val mediaImage: Image? = imageProxy.image
     if (mediaImage != null) {
       val image: InputImage =
         InputImage.fromMediaImage(
@@ -55,14 +79,19 @@ class VisionCameraObjectDetectorPlugin internal constructor() :
         )
       val task: Task<List<DetectedObject>> = objectDetector.process(image)
       val array = WritableNativeArray()
+
       try {
         val detectedObjects: List<DetectedObject> = Tasks.await(task)
         for (detectedObject in detectedObjects) {
           val map: WritableMap = WritableNativeMap()
-          val bounds: WritableMap = processBoundingBox(detectedObject.boundingBox)
+          val imgInfo = WritableNativeMap()
+
+          val bounds: WritableMap = processBoundingBox(detectedObject.boundingBox, image.width, image.height)
           map.putMap("bounds", bounds)
-          map.putInt("width", image.width)
-          map.putInt("height", image.height)
+
+          imgInfo.putInt("width",image.width)
+          imgInfo.putInt("height",image.height)
+          map.putMap("image",imgInfo)
 
           detectedObject.trackingId?.let { map.putInt("trackingId", it) }
 

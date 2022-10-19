@@ -1,12 +1,30 @@
 # vision-camera-object-detector
 
-Vision Camera plugin for detecting objects
+Vision Camera plugin for detecting objects with MLKit
 
 ## Installation
 
-```sh
-npm install vision-camera-object-detector
+```bash
+$ npm i vision-camera-object-detector
 ```
+
+or
+
+```bash
+$ yarn add vision-camera-object-detector
+```
+
+### iOS installation
+
+```bash
+$ npx pod-install
+```
+
+### Android installation
+
+No additional steps
+
+#
 
 ### Add react-native-reanimated plugin in babel.config.js
 
@@ -41,7 +59,7 @@ export default function App() {
   const [hasPermission, setHasPermission] = React.useState(false);
   const [objects, setObjects] = React.useState([]);
   const devices = useCameraDevices();
-  const device = devices.front;
+  const device = devices.back;
 
   React.useEffect(() => {
     (async () => {
@@ -66,7 +84,20 @@ export default function App() {
         frameProcessorFps={25}
       />
       {!!objects &&
-        objects.map((obj) => <View style={{ position: 'absolute' }} />)}
+        objects.map((obj) => (
+          <View
+            key={obj?.trackingId}
+            style={{
+              position: 'absolute',
+              top: obj.bounds.relativeOrigin.top + '%',
+              left: obj.bounds.relativeOrigin.left + '%',
+              width: obj.bounds.relativeSize.width + '%',
+              height: obj.bounds.relativeSize.height + '%',
+              borderWidth: 1,
+              borderColor: 'red',
+            }}
+          ></View>
+        ))}
     </View>
   ) : null;
 }
