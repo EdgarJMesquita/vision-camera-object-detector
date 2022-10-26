@@ -50,11 +50,26 @@ export interface DetectedObject {
    * Object's identification for tracking purposes
    */
   trackingId: number;
+  labels: Label[];
 }
 
-export function detectObjects(frame: Frame): Object[] {
+export interface Label {
+  text: string;
+  index: number;
+  confidence: number;
+}
+
+export interface DetectObjectsOptions {
+  enableClassification: boolean;
+  enableMultipleObjects: boolean;
+}
+
+export function detectObjects(
+  frame: Frame,
+  options?: DetectObjectsOptions
+): DetectedObject[] {
   'worklet';
   // @ts-ignore
   // eslint-disable-next-line no-undef
-  return __detectObjects(frame);
+  return __detectObjects(frame, options);
 }

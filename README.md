@@ -65,19 +65,52 @@ module.exports = {
 ```tsx
 import * as React from 'react';
 import { runOnJS } from 'react-native-reanimated';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Text, Button, Dimensions } from 'react-native';
 import { Camera } from 'react-native-vision-camera';
-import { DetectedObject, detectObjects } from 'vision-camera-object-detector';
+import { detectObjects, DetectedObject } from 'vision-camera-object-detector';
 import {
   useCameraDevices,
   useFrameProcessor,
 } from 'react-native-vision-camera';
+
+const Label = ({ label, trackingId }) => {
+  return (
+    <Text style={styles.label}>
+      {`TrackingId: ${trackingId}`}
+      {!!label?.text && `\n${label.text}(index: ${label.index})`}
+      {!!label?.confidence &&
+        `\n${label.confidence * 100}%(index: ${label.index})`}
+    </Text>
+  );
+};
+
+const Rect = ({ object }) => {
+  const label = object.labels[0] ?? null;
+
+  return (
+    <View
+      style={{
+        top: object.bounds.relativeOrigin.top + '%',
+        left: object.bounds.relativeOrigin.left + '%',
+        width: object.bounds.relativeSize.width + '%',
+        height: object.bounds.relativeSize.height + '%',
+        borderWidth: 0.5,
+        borderColor: 'white',
+      }}
+    >
+      <Label label={label} trackingId={object.trackingId} />
+    </View>
+  );
+};
 
 export default function App() {
   const [hasPermission, setHasPermission] = React.useState(false);
   const [objects, setObjects] = React.useState<DetectedObject[]>([]);
   const devices = useCameraDevices();
   const device = devices.back;
+  const [enableClassification, setEnableClassification] = React.useState(false);
+  const [enableMultipleObjects, setEnableMultipleObjects] =
+    React.useState(false);
 
   React.useEffect(() => {
     (async () => {
@@ -86,11 +119,17 @@ export default function App() {
     })();
   }, []);
 
-  const frameProcessor = useFrameProcessor((frame) => {
-    'worklet';
-    const detectedObjects = detectObjects(frame);
-    runOnJS(setObjects)(detectedObjects);
-  }, []);
+  const frameProcessor = useFrameProcessor(
+    (frame) => {
+      'worklet';
+      const detectedObjects = detectObjects(frame, {
+        enableClassification,
+        enableMultipleObjects,
+      });
+      runOnJS(setObjects)(detectedObjects);
+    },
+    [enableClassification, enableMultipleObjects]
+  );
 
   return device != null && hasPermission ? (
     <View style={styles.container}>
@@ -101,21 +140,23 @@ export default function App() {
         frameProcessor={frameProcessor}
         frameProcessorFps={25}
       />
-      {!!objects &&
-        objects.map((obj) => (
-          <View
-            key={obj?.trackingId}
-            style={[
-              styles.rect,
-              {
-                top: obj.bounds.relativeOrigin.top + '%',
-                left: obj.bounds.relativeOrigin.left + '%',
-                width: obj.bounds.relativeSize.width + '%',
-                height: obj.bounds.relativeSize.height + '%',
-              },
-            ]}
-          />
-        ))}
+      {objects.map((obj, index) => (
+        <Rect key={index} object={obj} />
+      ))}
+      <View style={styles.footer}>
+        <Button
+          title={`enableClassifications: ${
+            enableClassification ? 'yes' : 'no'
+          }`}
+          onPress={() => setEnableClassification((state) => !state)}
+        />
+        <Button
+          title={`enableMultipleObjects: ${
+            enableMultipleObjects ? 'yes' : 'no'
+          }`}
+          onPress={() => setEnableMultipleObjects((state) => !state)}
+        />
+      </View>
     </View>
   ) : null;
 }
@@ -125,10 +166,22 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
-  rect: {
+  label: {
+    top: 0,
+    left: 0,
+    marginTop: -16,
+    fontSize: 14,
+    color: 'black',
+    backgroundColor: 'white',
+  },
+  footer: {
     position: 'absolute',
-    borderWidth: 0.5,
-    borderColor: 'white',
+    left: 0,
+    bottom: 0,
+    right: 0,
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    padding: 20,
   },
 });
 ```
@@ -140,10 +193,15 @@ Currently react-native-vision-camera plugin made with swift won't work on XCode 
 Apparently Objective-C works fine.
 I'm working on refactoring my code from Swift to Objective-C
 
+## New features
+
+- Option for enabling classifications(Android)
+- Option for enabling multiple object(Android)
+
 ## Coming soon
 
-- Option for enabling classifications
-- Option for multiple object detects
+- Option for enabling classifications(iOS)
+- Option for enabling multiple object(iOS)
 
 ## Contributing
 

@@ -4,10 +4,7 @@ import android.annotation.SuppressLint
 import android.graphics.Rect
 import android.media.Image
 import androidx.camera.core.ImageProxy
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.bridge.WritableMap
-import com.facebook.react.bridge.WritableNativeArray
-import com.facebook.react.bridge.WritableNativeMap
+import com.facebook.react.bridge.*
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
@@ -22,7 +19,7 @@ import kotlin.Any as Any
 
 class VisionCameraObjectDetectorPlugin internal constructor() :
   FrameProcessorPlugin("detectObjects") {
-  var options: ObjectDetectorOptions = ObjectDetectorOptions.Builder()
+  private var options: ObjectDetectorOptions = ObjectDetectorOptions.Builder()
     .setDetectorMode(ObjectDetectorOptions.STREAM_MODE)
     .build()
 
@@ -63,12 +60,47 @@ class VisionCameraObjectDetectorPlugin internal constructor() :
     return (x * 100)/y
   }
 
-  private fun processClassification(){
-    // TODO: process classification
+  private fun processClassification(labels: MutableList<DetectedObject.Label>): WritableNativeArray {
+    val array = WritableNativeArray()
+    for (label in labels) {
+      val map = WritableNativeMap()
+      map.putString("text",label.text)
+      map.putInt("index",label.index)
+      map.putDouble("confidence", label.confidence.toDouble())
+      array.pushMap(map)
+    }
+    return array
   }
 
+  private fun handleArguments(params: Array<Any>){
+    if(params.isEmpty()) return
+    val arguments = params[0];
+    if(arguments is ReadableMap){
+
+      val enableClassification = if (arguments.hasKey("enableClassification")) arguments.getBoolean("enableClassification") else false
+      val enableMultipleObjects = if(arguments.hasKey("enableMultipleObjects")) arguments.getBoolean("enableMultipleObjects") else false
+      val hasEnableClassificationChanged = options.isClassificationEnabled != enableClassification
+      val hasEnableMultipleObjects = options.isMultipleObjectsEnabled != enableMultipleObjects
+
+      if(!hasEnableClassificationChanged and !hasEnableMultipleObjects) return
+
+      val newOptions = ObjectDetectorOptions.Builder()
+
+      if(enableClassification){
+        newOptions.enableClassification()
+      }
+
+      if(enableMultipleObjects){
+        newOptions.enableMultipleObjects()
+      }
+      newOptions.setDetectorMode(ObjectDetectorOptions.STREAM_MODE)
+      options = newOptions.build()
+      objectDetector = ObjectDetection.getClient(options)
+    }
+  }
 
   override fun callback(imageProxy: ImageProxy, params: Array<Any>): Any? {
+    handleArguments(params)
     @SuppressLint("UnsafeOptInUsageError")
     val mediaImage: Image? = imageProxy.image
     if (mediaImage != null) {
@@ -84,16 +116,18 @@ class VisionCameraObjectDetectorPlugin internal constructor() :
         val detectedObjects: List<DetectedObject> = Tasks.await(task)
         for (detectedObject in detectedObjects) {
           val map: WritableMap = WritableNativeMap()
-          val imgInfo = WritableNativeMap()
 
           val bounds: WritableMap = processBoundingBox(detectedObject.boundingBox, image.width, image.height)
           map.putMap("bounds", bounds)
 
+          val imgInfo = WritableNativeMap()
           imgInfo.putInt("width",image.width)
           imgInfo.putInt("height",image.height)
           map.putMap("image",imgInfo)
 
           detectedObject.trackingId?.let { map.putInt("trackingId", it) }
+
+          map.putArray("labels",processClassification(detectedObject.labels))
 
           array.pushMap(map)
         }
